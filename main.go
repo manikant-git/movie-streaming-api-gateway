@@ -25,10 +25,11 @@ func NewRouter() *Router {
 	}
 }
 
+// ServeHTTP implements the http.Handler interface
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	log.Printf("[API Gateway] Received request: %s %s\n", req.Method, req.URL.Path)
 
-	// Check authentication
+	// Check authentication (skip for health check)
 	token := req.Header.Get("Authorization")
 	if !strings.HasPrefix(token, "Bearer ") {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -57,6 +58,12 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	proxy.ServeHTTP(w, req)
 }
 
+func healthHandler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `{"status": "healthy", "service": "api-gateway"}`)
+}
+
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -64,6 +71,15 @@ func main() {
 	}
 
 	router := NewRouter()
+
+	// Health check endpoint (no auth required)
+	http.HandleFunc("/health", healthHandler)
+
+	// API routes (with auth)
+	http.Handle("/api/", router)
+
 	log.Printf("[API Gateway] Starting on port %s...\n", port)
-	log.Fatal(http.ListenAndServe(":" + port, router))
+	log.Printf("[API Gateway] Health check: GET /health\n")
+	log.Printf("[API Gateway] API endpoints: /api/v1/{movies,users,stream,search}\n")
+	log.Fatal(http.ListenAndServe(":" + port, nil))
 }
